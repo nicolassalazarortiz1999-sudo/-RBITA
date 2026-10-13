@@ -1,0 +1,97 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mi Música</title>
+<style>
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#020b1f;color:#fff;font-family:system-ui,sans-serif;overflow:hidden}
+.v{position:absolute;inset:0;display:none;flex-direction:column;padding:env(safe-area-inset-top) 14px 14px}
+.v.on{display:flex}
+h1{text-align:center;margin:10px 0 14px;font-size:26px;background:linear-gradient(90deg,#4df,#59f,#4fd);-webkit-background-clip:text;color:transparent}
+.logo{width:96px;height:96px;margin:14px auto 0;animation:giro 8s linear infinite;filter:drop-shadow(0 0 14px #2af)}
+@keyframes giro{to{transform:rotate(360deg)}}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;overflow:auto;padding:6px 2px 24px}
+.g{padding:22px 8px;border:0;border-radius:18px;color:#fff;font-size:17px;font-weight:700;background:linear-gradient(135deg,var(--a),var(--b));box-shadow:0 0 16px var(--a);animation:pop .5s both}
+.g span{display:block;font-size:30px;margin-bottom:6px}
+.g:active,.b:active,.s:active{transform:scale(.94)}
+@keyframes pop{from{opacity:0;transform:scale(.6)}}
+.bar{display:flex;gap:10px;align-items:center;margin:10px 0}
+.b{border:0;border-radius:14px;padding:12px 16px;color:#fff;font-size:16px;font-weight:700;background:linear-gradient(135deg,#19f,#0cb)}
+.list{flex:1;overflow:auto}
+.s{display:block;width:100%;text-align:left;border:0;border-radius:12px;padding:14px;margin-bottom:8px;color:#fff;font-size:15px;background:rgba(80,160,255,.15)}
+.vacio{text-align:center;opacity:.7;margin-top:40px;line-height:1.6}
+#p{padding:0}
+#cv{position:absolute;inset:0;width:100%;height:100%}
+.dw{position:absolute;left:50%;top:42%;width:min(60vw,300px);height:min(60vw,300px);margin:calc(min(60vw,300px)/-2) 0 0 calc(min(60vw,300px)/-2)}
+.dw img{width:100%;height:100%;filter:drop-shadow(0 0 25px #2af)}
+.top,.bot{position:absolute;left:0;right:0;z-index:2;padding:0 14px}
+.top{top:env(safe-area-inset-top);padding-top:10px}
+.bot{bottom:0;padding-bottom:calc(18px + env(safe-area-inset-bottom));text-align:center}
+#t{font-size:18px;font-weight:700;margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+input[type=range]{width:100%;accent-color:#2cf}
+.ctl{display:flex;justify-content:center;gap:16px;margin-top:12px}
+.ctl .b{font-size:22px;min-width:64px}
+</style></head><body>
+<div class="v on" id="h"><img class="logo" src="icono.png" alt=""><h1>Mi Música</h1><div class="grid" id="gr"></div></div>
+<div class="v" id="l"><div class="bar"><button class="b" id="back">⬅</button><h1 id="gt" style="margin:0;flex:1;text-align:left;font-size:22px"></h1><button class="b" id="add">＋ Agregar</button></div><div class="list" id="ls"></div></div>
+<div class="v" id="p"><canvas id="cv"></canvas><div class="dw"><img id="d" src="icono.png" alt=""></div>
+<div class="top"><button class="b" id="back2">⬅</button></div>
+<div class="bot"><div id="t"></div><input type="range" id="sk" min="0" max="100" value="0"><div class="ctl"><button class="b" id="pv">⏮</button><button class="b" id="pp">⏸</button><button class="b" id="nx">⏭</button></div></div></div>
+<input type="file" id="f" accept="audio/*" multiple hidden>
+<audio id="au"></audio>
+<script>
+const G=[["Rock","Rock","🎸","#f33","#a0f"],["Pop","Pop","🎤","#f6a","#a4f"],["Salsa","Salsa","💃","#f90","#f33"],["Merengue","Merengue","🥁","#fc0","#f60"],["Bachata","Bachata","🌹","#f4a","#c06"],["Musica_Vieja","Música Vieja","📻","#8a6","#486"],["Reggaeton","Reggaetón","🔥","#f50","#fa0"],["Vallenato","Vallenato","🪗","#0c8","#08c"],["Baladas","Baladas","💙","#4af","#26f"],["Variado","Variado","🎶","#2df","#59f"]];
+const C=window.Capacitor,FS=C&&C.Plugins&&C.Plugins.Filesystem,R="MiMusica",D="DOCUMENTS",mem={};
+let songs=[],idx=0,cur="",ac=null,an=null,data=null;
+const $=id=>document.getElementById(id),au=$("au");
+const show=id=>["h","l","p"].forEach(k=>$(k).classList.toggle("on",k==id));
+const EXT=/\.(mp3|m4a|wav|ogg|aac|flac|opus)$/i;
+$("gr").innerHTML=G.map((g,i)=>`<button class="g" style="--a:${g[3]};--b:${g[4]};animation-delay:${i*60}ms" data-g="${g[0]}"><span>${g[2]}</span>${g[1]}</button>`).join("");
+$("gr").onclick=e=>{const b=e.target.closest(".g");if(b)openG(b.dataset.g)};
+async function init(){if(!FS)return;try{await FS.requestPermissions()}catch(e){}
+ for(const g of G){try{await FS.mkdir({path:R+"/"+g[0],directory:D,recursive:true})}catch(e){}}}
+async function list(g){const out=[];
+ if(FS){try{const r=await FS.readdir({path:R+"/"+g,directory:D});
+  for(const f of r.files){const n=f.name||f;if(!EXT.test(n))continue;
+   const u=await FS.getUri({path:R+"/"+g+"/"+n,directory:D});
+   out.push({n:n.replace(/\.[^.]+$/,""),u:C.convertFileSrc(u.uri)})}}catch(e){}}
+ return out.concat(mem[g]||[])}
+async function openG(g){cur=g;const meta=G.find(x=>x[0]==g);$("gt").textContent=meta[2]+" "+meta[1];show("l");
+ $("ls").innerHTML='<div class="vacio">Cargando…</div>';
+ songs=[];if(g=="Variado"){for(const k of G)songs=songs.concat(await list(k[0]))}else songs=await list(g);
+ $("ls").innerHTML=songs.length?songs.map((s,i)=>`<button class="s" data-i="${i}">🎵 ${s.n}</button>`).join(""):`<div class="vacio">Esta carpeta está vacía 🎧<br>Pega tu música en <b>Documents/${R}/${g}</b><br>o toca <b>＋ Agregar</b></div>`}
+$("ls").onclick=e=>{const b=e.target.closest(".s");if(b)play(+b.dataset.i)};
+$("back").onclick=()=>show("h");
+$("back2").onclick=()=>{au.pause();show("l")};
+$("add").onclick=()=>$("f").click();
+$("f").onchange=async e=>{const fs=[...e.target.files];e.target.value="";
+ for(const f of fs){if(FS){try{const b=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result.split(",")[1]);r.onerror=no;r.readAsDataURL(f)});
+  await FS.writeFile({path:`${R}/${cur}/${f.name}`,data:b,directory:D,recursive:true})}catch(x){}}
+  else(mem[cur]=mem[cur]||[]).push({n:f.name.replace(/\.[^.]+$/,""),u:URL.createObjectURL(f)})}
+ openG(cur)};
+function audioInit(){try{if(!ac){ac=new(window.AudioContext||window.webkitAudioContext)();an=ac.createAnalyser();an.fftSize=256;an.smoothingTimeConstant=.8;
+ ac.createMediaElementSource(au).connect(an);an.connect(ac.destination);data=new Uint8Array(an.frequencyBinCount)}ac.resume()}catch(e){an=null}}
+function play(i){if(!songs.length)return;idx=(i+songs.length)%songs.length;const s=songs[idx];au.src=s.u;$("t").textContent="🎵 "+s.n;show("p");audioInit();au.play().catch(()=>{});$("pp").textContent="⏸"}
+$("pp").onclick=()=>{if(au.paused){au.play();$("pp").textContent="⏸"}else{au.pause();$("pp").textContent="▶"}};
+$("nx").onclick=()=>play(idx+1);$("pv").onclick=()=>play(idx-1);au.onended=()=>play(idx+1);
+au.ontimeupdate=()=>{if(au.duration)$("sk").value=au.currentTime/au.duration*100};
+$("sk").oninput=e=>{if(au.duration)au.currentTime=e.target.value/100*au.duration};
+const cv=$("cv"),x=cv.getContext("2d");let ang=0,t=0;
+function fit(){cv.width=innerWidth;cv.height=innerHeight}onresize=fit;fit();
+function loop(){requestAnimationFrame(loop);if(!$("p").classList.contains("on"))return;
+ const W=cv.width,H=cv.height,cx=W/2,cy=H*.42,N=64,b=new Array(N).fill(0);
+ if(an&&!au.paused){an.getByteFrequencyData(data);for(let i=0;i<N;i++)b[i]=(data[i]||0)/255}
+ else if(!au.paused){t+=.1;for(let i=0;i<N;i++)b[i]=.4+.3*Math.sin(t+i*.3)}
+ const lv=b.reduce((a,c)=>a+c,0)/N;
+ const g=x.createRadialGradient(cx,cy,10,cx,cy,Math.max(W,H)*.8);g.addColorStop(0,`hsla(200,100%,50%,${.12+lv*.55})`);g.addColorStop(1,"#020b1f");
+ x.fillStyle=g;x.fillRect(0,0,W,H);
+ const r=Math.min(W*.3,150)*(1+lv*.25);
+ x.lineWidth=3;x.lineCap="round";
+ for(let i=0;i<N*2;i++){const v=b[i<N?i:2*N-1-i],a=i/(N*2)*Math.PI*2+ang*.3,l=v*95+4;
+  x.strokeStyle=`hsl(${180+v*120+i*1.5},100%,60%)`;x.beginPath();
+  x.moveTo(cx+Math.cos(a)*(r+8),cy+Math.sin(a)*(r+8));x.lineTo(cx+Math.cos(a)*(r+8+l),cy+Math.sin(a)*(r+8+l));x.stroke()}
+ const n=28,gap=H*.7/n;
+ for(let i=0;i<n;i++){const v=b[Math.floor(i*N/n)],w=v*W*.3+4,y=H*.08+i*gap;
+  x.fillStyle=`hsl(${190+v*140+i*3},100%,60%)`;x.fillRect(0,y,w,gap*.6);x.fillRect(W-w,y,w,gap*.6)}
+ ang+=.01+lv*.08;$("d").style.transform=`rotate(${ang}rad) scale(${1+lv*.25})`}
+loop();init();
+</script></body></html>
